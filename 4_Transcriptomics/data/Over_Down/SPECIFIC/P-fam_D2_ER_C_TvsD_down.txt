@@ -1,0 +1,2 @@
+AB_036475_T.1	PF00182	149.5	1.2e-43	Glyco_hydro_19	Chitinase class I
+AB_015092_T.1	PF06813	251.0	1.1e-74	Nodulin-like	Nodulin-like

@@ -1,0 +1,677 @@
+### This script make a dataframe with all samples of GC-SM analisys###
+## February 2020
+## Verónica Reyes Galindo
+
+
+library(tidyr)
+library(ggpubr)
+library(rstatix)
+library(dplyr)
+library(ggplot2)
+
+# Load file
+
+metabolites<-read.delim("../../metadata/calculate_relative_abs.txt")
+
+
+# ANOVA per metabolite
+
+beta.pinene<- metabolites[,c(1,3:5,8)]
+L.alfa.bornyl.acetate<- metabolites[,c(1,3:5,9)]
+beta.Caryophyllene.oxide<- metabolites[,c(1,3:5,10)]
+alfa.Caryophyllene<- metabolites[,c(1,3:5,11)]
+beta.Cubebene<- metabolites[,c(1,3:5,12)]
+alfa.Cubebene<- metabolites[,c(1,3:5,13)]
+delta.Cadinene<- metabolites[,c(1,3:5,14)]
+
+# Tabla con metabolitos como un factor
+colnames(beta.pinene)[5]<-"con_abs"
+colnames(L.alfa.bornyl.acetate)[5]<-"con_abs"
+colnames(beta.Caryophyllene.oxide)[5]<-"con_abs"
+colnames(alfa.Caryophyllene)[5]<-"con_abs"
+colnames(beta.Cubebene)[5]<-"con_abs"
+colnames(alfa.Cubebene)[5]<-"con_abs"
+colnames(delta.Cadinene)[5]<-"con_abs"
+
+datos<-rbind(beta.pinene,L.alfa.bornyl.acetate, beta.Caryophyllene.oxide, alfa.Caryophyllene,
+             beta.Cubebene, alfa.Cubebene, delta.Cadinene) 
+
+datos$metabolit<- c(rep("beta.pinene",40), rep("L.alfa.bornyl.acetate",40),
+                    rep("beta.Caryophyllene.oxide",40), rep("alfa.Caryophyllene",40),
+                    rep("beta.Cubebene",40), rep("alfa.Cubebene",40),
+                    rep("delta.Cadinene",40))
+
+datos$con_abs <- ifelse(datos$con_abs == 0, 0.01, datos$con_abs)
+
+#datos$con_abs<- log1p(datos$con_abs)
+
+
+
+# Comparación de medias 4 Factores
+
+datos %>%
+  group_by(Condition,Season,A.exposition,metabolit)%>%
+  get_summary_stats(con_abs, type = "mean_sd")
+
+# Verificar que las columnas sean factores y tengan niveles
+
+datos$A.exposition <- as.factor(datos$A.exposition)
+# Cambiar el orden de los niveles
+datos$A.exposition <- factor(datos$A.exposition, levels = c("2016", "2015"))
+
+datos$Condition <- as.factor(datos$Condition)
+# Cambiar el orden de los niveles
+datos$Condition <- factor(datos$Condition, levels = c("tolerant", "damaged"))
+
+datos$Season <- as.factor(datos$Season)
+# Cambiar el orden de los niveles
+datos$Season <- factor(datos$Season, levels = c("MC", "Conti"))
+
+datos$metabolit <- as.factor(datos$metabolit)
+
+datos$C.A.T <- as.factor(datos$C.A.T)
+
+# Gráfico de caja (boxplot) con diferenciación por linetype para los años
+bxp <- ggplot(datos, aes(x = metabolit, y = con_abs, fill = Condition, facet.by= "Season",linetype = A.exposition)) +
+  geom_boxplot() +
+  facet_wrap(~ Season, scales = "free",
+             labeller = labeller(Season = c("MC" = "87 ppb", "Conti" = "170 ppb")),ncol = 1) +
+  scale_fill_manual(values = c( "#b1e787","#e98382"),
+                    labels = c("Asymptomatic", "Symptomatic")) +
+  scale_color_manual(values = c("#e98382", "#b1e787")) +
+  scale_linetype_manual(name = "Exposition", values = c("solid", "dashed"),
+                        labels = c("One year", "Two years")) +  # Cambia los nombres de los años
+  scale_x_discrete (labels = c('beta.pinene' = expression(beta~'-Pinene'),
+                               'L.alfa.bornyl.acetate' = expression('L-'~ alpha ~'-Bornyl acetate'),
+                               'beta.Caryophyllene.oxide'= expression(beta~'-Caryophyllene oxide'),
+                               'alfa.Caryophyllene' = expression(alpha~'-Caryophyllene'),
+                               'beta.Cubebene'= expression(beta~'-Cubebene'),
+                               'alfa.Cubebene'= expression(alpha~'-Cubebene'),
+                               'delta.Cadinene' = expression(delta~'-Cadinene')))+
+  labs(x = "metabolites", y = "g/100g Tissue") +
+  theme_bw() +
+  theme(legend.direction = "horizontal", legend.position = "bottom",
+        axis.text.x = element_text(angle = 45, hjust = 1)) 
+
+bxp
+#  facet_wrap(~ A.exposition, scales = "free",labeller = labeller(A.exposition = c("2015" = "Two years exposition", "2016" = "One year exposition")),ncol = 1) +
+
+ggsave("../../outputs/Barplot_metabol.tiff")
+
+#Revisar valores extremos
+datos %>%
+  group_by(Condition,Season,A.exposition,metabolit)%>%
+  identify_outliers(con_abs)
+
+#Supuestos de normalidad
+
+
+
+hist(datos$con_abs, main = "Histograma de Concentración", xlab = "Concentración")
+
+
+#resultado_kruskal <- kruskal.test(con_abs ~ Condition , data = datos)
+
+resultado_anovan <- oneway.test(con_abs ~ Condition + Season + A.exposition, data = datos, na.action = na.omit)
+print(resultado_anovan)
+
+#resultado_friedman <- friedman.test(con_abs ~ Condition + Season + A.exposition, data = datos, na.action = na.omit)
+#print(resultado_friedman)
+
+
+
+glmer_1<-glmer(con_abs ~ Condition * Season * A.exposition + (1|metabolit) , data = datos, family = Gamma(link = "log"))
+summary(glmer_1)
+
+modelo_glm_1 <- glm(con_abs ~ Condition * A.exposition* Season, data = datos, family = Gamma)
+summary(modelo_glm_3)
+
+modelo_glm_2 <- glm(con_abs ~ Condition * Season, data = datos, family = Gamma)
+summary(modelo_glm_3)
+
+modelo_glm_3 <- glm(con_abs ~ Condition * A.exposition, data = datos, family = Gamma)
+summary(modelo_glm_3)
+
+modelo_glm_4 <- glm(con_abs ~ Season * A.exposition, data = datos, family = Gamma)
+summary(modelo_glm_4)
+
+modelo_glm_5 <- glm(con_abs ~ metabolit * Condition, data = datos, family = Gamma)
+summary(modelo_glm_5)
+
+modelo_glm_6 <- glm(con_abs ~ metabolit * Season , data = datos, family = Gamma)
+summary(modelo_glm_6)
+
+modelo_glm_7 <- glm(con_abs ~ metabolit *A.exposition, data = datos, family = Gamma)
+summary(modelo_glm_7)
+
+modelo_glm_8 <- glm(con_abs ~ metabolit * Condition * Season , data = datos, family = Gamma)
+summary(modelo_glm_8)
+
+modelo_glm_9 <- glm(con_abs ~ metabolit * Condition * A.exposition , data = datos, family = Gamma)
+summary(modelo_glm_9)
+
+modelo_glm_10 <- glm(con_abs ~ metabolit * Season * A.exposition , data = datos, family = Gamma)
+summary(modelo_glm_10)
+
+modelo_glm_11 <- glm(con_abs ~ metabolit * Condition * Season * A.exposition , data = datos, family = Gamma)
+summary(modelo_glm_11)
+#### PLOT MODEL
+par(mfrow =c(2,2))
+plot(modelo_glm_11)
+
+AIC(glmer_1,modelo_glm_1,modelo_glm_2,modelo_glm_3,modelo_glm_4,
+    modelo_glm_5,modelo_glm_6,modelo_glm_7,modelo_glm_8,
+    modelo_glm_9,modelo_glm_10,modelo_glm_11)
+
+#pruebas 
+
+library(sjmisc)
+library(lmerTest)
+library(bruceR)
+summary(modelo_glm_1)
+r2(modelo_glm_1)
+model_performance(modelo_glm_1)
+
+
+print_table(modelo_glm_1)
+model_summary(modelo_glm_1)
+
+
+## alfa.Caryophyllene
+
+datos_filtrados <- datos %>%
+  filter(as.character(metabolit) == "alfa.Caryophyllene")%>%
+  filter(as.character(Season) == "MC")
+hist(datos_filtrados$con_abs, main = "Histograma de Concentración", xlab = "Concentración")
+
+#Grupos independientes SANAS y DAÑADAS
+#datos_filtrados <- unite(datos_filtrados, col = "metabolCodition", c(metabolit, Condition), sep = "_")
+wilcox.test(con_abs ~ Condition, paired = FALSE, data = datos_filtrados)
+
+## alfa.Cubebene
+
+datos_filtrados <- datos %>%
+  filter(as.character(metabolit) == "alfa.Cubebene")%>%
+  filter(as.character(Season) == "MC")
+hist(datos_filtrados$con_abs, main = "Histograma de Concentración", xlab = "Concentración")
+
+#Grupos independientes SANAS y DAÑADAS
+#datos_filtrados <- unite(datos_filtrados, col = "metabolCodition", c(metabolit, Condition), sep = "_")
+wilcox.test(con_abs ~ Condition, paired = FALSE, data = datos_filtrados)
+
+## beta.Caryophyllene.oxide
+
+datos_filtrados <- datos %>%
+  filter(as.character(metabolit) == "beta.Caryophyllene.oxide")%>%
+  filter(as.character(Season) == "MC")
+hist(datos_filtrados$con_abs, main = "Histograma de Concentración", xlab = "Concentración")
+
+#Grupos independientes SANAS y DAÑADAS
+#datos_filtrados <- unite(datos_filtrados, col = "metabolCodition", c(metabolit, Condition), sep = "_")
+wilcox.test(con_abs ~ Condition, paired = FALSE, data = datos_filtrados)
+
+## beta.Cubebene
+
+datos_filtrados <- datos %>%
+  filter(as.character(metabolit) == "beta.Cubebene")%>%
+  filter(as.character(Season) == "MC")
+hist(datos_filtrados$con_abs, main = "Histograma de Concentración", xlab = "Concentración")
+
+#Grupos independientes SANAS y DAÑADAS
+#datos_filtrados <- unite(datos_filtrados, col = "metabolCodition", c(metabolit, Condition), sep = "_")
+wilcox.test(con_abs ~ Condition, paired = FALSE, data = datos_filtrados)
+
+## beta.pinene
+
+datos_filtrados <- datos %>%
+  filter(as.character(metabolit) == "beta.pinene")%>%
+  filter(as.character(Season) == "MC")
+hist(datos_filtrados$con_abs, main = "Histograma de Concentración", xlab = "Concentración")
+
+#Grupos independientes SANAS y DAÑADAS
+#datos_filtrados <- unite(datos_filtrados, col = "metabolCodition", c(metabolit, Condition), sep = "_")
+wilcox.test(con_abs ~ Condition, paired = FALSE, data = datos_filtrados)
+
+## delta.Cadinene
+
+datos_filtrados <- datos %>%
+  filter(as.character(metabolit) == "delta.Cadinene")%>%
+  filter(as.character(Season) == "MC")
+hist(datos_filtrados$con_abs, main = "Histograma de Concentración", xlab = "Concentración")
+
+#Grupos independientes SANAS y DAÑADAS
+#datos_filtrados <- unite(datos_filtrados, col = "metabolCodition", c(metabolit, Condition), sep = "_")
+wilcox.test(con_abs ~ Condition, paired = FALSE, data = datos_filtrados)
+
+## L.alfa.bornyl.acetate
+
+datos_filtrados <- datos %>%
+  filter(as.character(metabolit) == "L.alfa.bornyl.acetate")%>%
+  filter(as.character(Season) == "MC")
+hist(datos_filtrados$con_abs, main = "Histograma de Concentración", xlab = "Concentración")
+
+#Grupos independientes SANAS y DAÑADAS
+#datos_filtrados <- unite(datos_filtrados, col = "metabolCodition", c(metabolit, Condition), sep = "_")
+wilcox.test(con_abs ~ Condition, paired = FALSE, data = datos_filtrados)
+
+
+
+## alfa.Caryophyllene
+
+datos_filtrados <- datos %>%
+  filter(as.character(metabolit) == "alfa.Caryophyllene")%>%
+  filter(as.character(Season) == "Conti")
+hist(datos_filtrados$con_abs, main = "Histograma de Concentración", xlab = "Concentración")
+
+#Grupos independientes SANAS y DAÑADAS
+#datos_filtrados <- unite(datos_filtrados, col = "metabolCodition", c(metabolit, Condition), sep = "_")
+wilcox.test(con_abs ~ Condition, paired = FALSE, data = datos_filtrados)
+
+## alfa.Cubebene
+
+datos_filtrados <- datos %>%
+  filter(as.character(metabolit) == "alfa.Cubebene")%>%
+  filter(as.character(Season) == "Conti")
+hist(datos_filtrados$con_abs, main = "Histograma de Concentración", xlab = "Concentración")
+
+#Grupos independientes SANAS y DAÑADAS
+#datos_filtrados <- unite(datos_filtrados, col = "metabolCodition", c(metabolit, Condition), sep = "_")
+wilcox.test(con_abs ~ Condition, paired = FALSE, data = datos_filtrados)
+
+## beta.Caryophyllene.oxide
+
+datos_filtrados <- datos %>%
+  filter(as.character(metabolit) == "beta.Caryophyllene.oxide")%>%
+  filter(as.character(Season) == "Conti")
+hist(datos_filtrados$con_abs, main = "Histograma de Concentración", xlab = "Concentración")
+
+#Grupos independientes SANAS y DAÑADAS
+#datos_filtrados <- unite(datos_filtrados, col = "metabolCodition", c(metabolit, Condition), sep = "_")
+wilcox.test(con_abs ~ Condition, paired = FALSE, data = datos_filtrados)
+
+## beta.Cubebene
+
+datos_filtrados <- datos %>%
+  filter(as.character(metabolit) == "beta.Cubebene")%>%
+  filter(as.character(Season) == "Conti")
+hist(datos_filtrados$con_abs, main = "Histograma de Concentración", xlab = "Concentración")
+
+#Grupos independientes SANAS y DAÑADAS
+#datos_filtrados <- unite(datos_filtrados, col = "metabolCodition", c(metabolit, Condition), sep = "_")
+wilcox.test(con_abs ~ Condition, paired = FALSE, data = datos_filtrados)
+
+## beta.pinene
+
+datos_filtrados <- datos %>%
+  filter(as.character(metabolit) == "beta.pinene")%>%
+  filter(as.character(Season) == "Conti")
+hist(datos_filtrados$con_abs, main = "Histograma de Concentración", xlab = "Concentración")
+
+#Grupos independientes SANAS y DAÑADAS
+#datos_filtrados <- unite(datos_filtrados, col = "metabolCodition", c(metabolit, Condition), sep = "_")
+wilcox.test(con_abs ~ Condition, paired = FALSE, data = datos_filtrados)
+
+## delta.Cadinene
+
+datos_filtrados <- datos %>%
+  filter(as.character(metabolit) == "delta.Cadinene")%>%
+  filter(as.character(Season) == "Conti")
+hist(datos_filtrados$con_abs, main = "Histograma de Concentración", xlab = "Concentración")
+
+#Grupos independientes SANAS y DAÑADAS
+#datos_filtrados <- unite(datos_filtrados, col = "metabolCodition", c(metabolit, Condition), sep = "_")
+wilcox.test(con_abs ~ Condition, paired = FALSE, data = datos_filtrados)
+
+## L.alfa.bornyl.acetate
+
+datos_filtrados <- datos %>%
+  filter(as.character(metabolit) == "L.alfa.bornyl.acetate")%>%
+  filter(as.character(Season) == "Conti")
+hist(datos_filtrados$con_abs, main = "Histograma de Concentración", xlab = "Concentración")
+
+#Grupos independientes SANAS y DAÑADAS
+#datos_filtrados <- unite(datos_filtrados, col = "metabolCodition", c(metabolit, Condition), sep = "_")
+wilcox.test(con_abs ~ Condition, paired = FALSE, data = datos_filtrados)
+
+
+
+
+
+
+
+# Muestras antes y despues pareadas 1 año y 2 de exposicio
+
+## alfa.Caryophyllene
+
+datos_filtrados <- datos %>%
+  filter(as.character(Condition) == "tolerant")%>%
+  filter(as.character(metabolit) == "alfa.Caryophyllene")%>%
+  filter(as.character(Season) == "MC")
+hist(datos_filtrados$con_abs, main = "Histograma de Concentración", xlab = "Concentración")
+
+#Grupos independientes SANAS y DAÑADAS
+wilcox.test(con_abs ~ A.exposition, paired = TRUE, data = datos_filtrados)
+
+## alfa.Cubebene
+
+datos_filtrados <- datos %>%
+  filter(as.character(Condition) == "tolerant")%>%
+  filter(as.character(metabolit) == "alfa.Cubebene")%>%
+  filter(as.character(Season) == "MC")
+hist(datos_filtrados$con_abs, main = "Histograma de Concentración", xlab = "Concentración")
+
+#Grupos independientes SANAS y DAÑADAS
+wilcox.test(con_abs ~ A.exposition, paired = TRUE, data = datos_filtrados)
+
+## beta.Caryophyllene.oxide
+
+datos_filtrados <- datos %>%
+  filter(as.character(Condition) == "tolerant")%>%
+  filter(as.character(metabolit) == "beta.Caryophyllene.oxide")%>%
+  filter(as.character(Season) == "MC")
+hist(datos_filtrados$con_abs, main = "Histograma de Concentración", xlab = "Concentración")
+
+#Grupos independientes SANAS y DAÑADAS
+wilcox.test(con_abs ~ A.exposition, paired = TRUE, data = datos_filtrados)
+
+## beta.Cubebene
+
+datos_filtrados <- datos %>%
+  filter(as.character(Condition) == "tolerant")%>%
+  filter(as.character(metabolit) == "beta.Cubebene")%>%
+  filter(as.character(Season) == "MC")
+hist(datos_filtrados$con_abs, main = "Histograma de Concentración", xlab = "Concentración")
+
+#Grupos independientes SANAS y DAÑADAS
+wilcox.test(con_abs ~ A.exposition, paired = TRUE, data = datos_filtrados)
+
+## beta.pinene
+
+datos_filtrados <- datos %>%
+  filter(as.character(Condition) == "tolerant")%>%
+  filter(as.character(metabolit) == "beta.pinene")%>%
+  filter(as.character(Season) == "MC")
+hist(datos_filtrados$con_abs, main = "Histograma de Concentración", xlab = "Concentración")
+
+#Grupos independientes SANAS y DAÑADAS
+wilcox.test(con_abs ~ A.exposition, paired = TRUE, data = datos_filtrados)
+
+## adelta.Cadinene
+
+datos_filtrados <- datos %>%
+  filter(as.character(Condition) == "tolerant")%>%
+  filter(as.character(metabolit) == "delta.Cadinene")%>%
+  filter(as.character(Season) == "MC")
+hist(datos_filtrados$con_abs, main = "Histograma de Concentración", xlab = "Concentración")
+
+#Grupos independientes SANAS y DAÑADAS
+wilcox.test(con_abs ~ A.exposition, paired = TRUE, data = datos_filtrados)
+
+## L.alfa.bornyl.acetate
+
+datos_filtrados <- datos %>%
+  filter(as.character(Condition) == "tolerant")%>%
+  filter(as.character(metabolit) == "L.alfa.bornyl.acetate")%>%
+  filter(as.character(Season) == "MC")
+hist(datos_filtrados$con_abs, main = "Histograma de Concentración", xlab = "Concentración")
+
+#Grupos independientes SANAS y DAÑADAS
+wilcox.test(con_abs ~ A.exposition, paired = TRUE, data = datos_filtrados)
+
+## alfa.Caryophyllene
+
+datos_filtrados <- datos %>%
+  filter(as.character(Condition) == "damaged")%>%
+  filter(as.character(metabolit) == "alfa.Caryophyllene")%>%
+  filter(as.character(Season) == "MC")
+hist(datos_filtrados$con_abs, main = "Histograma de Concentración", xlab = "Concentración")
+
+#Grupos independientes SANAS y DAÑADAS
+wilcox.test(con_abs ~ A.exposition, paired = TRUE, data = datos_filtrados)
+
+## alfa.Cubebene
+
+datos_filtrados <- datos %>%
+  filter(as.character(Condition) == "damaged")%>%
+  filter(as.character(metabolit) == "alfa.Cubebene")%>%
+  filter(as.character(Season) == "MC")
+hist(datos_filtrados$con_abs, main = "Histograma de Concentración", xlab = "Concentración")
+
+#Grupos independientes SANAS y DAÑADAS
+wilcox.test(con_abs ~ A.exposition, paired = TRUE, data = datos_filtrados)
+
+## beta.Caryophyllene.oxide
+
+datos_filtrados <- datos %>%
+  filter(as.character(Condition) == "damaged")%>%
+  filter(as.character(metabolit) == "beta.Caryophyllene.oxide")%>%
+  filter(as.character(Season) == "MC")
+hist(datos_filtrados$con_abs, main = "Histograma de Concentración", xlab = "Concentración")
+
+#Grupos independientes SANAS y DAÑADAS
+wilcox.test(con_abs ~ A.exposition, paired = TRUE, data = datos_filtrados)
+
+## beta.Cubebene
+
+datos_filtrados <- datos %>%
+  filter(as.character(Condition) == "damaged")%>%
+  filter(as.character(metabolit) == "beta.Cubebene")%>%
+  filter(as.character(Season) == "MC")
+hist(datos_filtrados$con_abs, main = "Histograma de Concentración", xlab = "Concentración")
+
+#Grupos independientes SANAS y DAÑADAS
+wilcox.test(con_abs ~ A.exposition, paired = TRUE, data = datos_filtrados)
+
+## beta.pinene
+
+datos_filtrados <- datos %>%
+  filter(as.character(Condition) == "damaged")%>%
+  filter(as.character(metabolit) == "beta.pinene")%>%
+  filter(as.character(Season) == "MC")
+hist(datos_filtrados$con_abs, main = "Histograma de Concentración", xlab = "Concentración")
+
+#Grupos independientes SANAS y DAÑADAS
+wilcox.test(con_abs ~ A.exposition, paired = TRUE, data = datos_filtrados)
+
+## adelta.Cadinene
+
+datos_filtrados <- datos %>%
+  filter(as.character(Condition) == "damaged")%>%
+  filter(as.character(metabolit) == "delta.Cadinene")%>%
+  filter(as.character(Season) == "MC")
+hist(datos_filtrados$con_abs, main = "Histograma de Concentración", xlab = "Concentración")
+
+#Grupos independientes SANAS y DAÑADAS
+wilcox.test(con_abs ~ A.exposition, paired = TRUE, data = datos_filtrados)
+
+## L.alfa.bornyl.acetate
+
+datos_filtrados <- datos %>%
+  filter(as.character(Condition) == "damaged")%>%
+  filter(as.character(metabolit) == "L.alfa.bornyl.acetate")%>%
+  filter(as.character(Season) == "MC")
+hist(datos_filtrados$con_abs, main = "Histograma de Concentración", xlab = "Concentración")
+
+#Grupos independientes SANAS y DAÑADAS
+wilcox.test(con_abs ~ A.exposition, paired = TRUE, data = datos_filtrados)
+
+
+# Muestras antes y despues pareadas 87 vs 170
+
+
+## alfa.Caryophyllene
+
+datos_filtrados <- datos %>%
+  filter(as.character(Condition) == "tolerant")%>%
+  filter(as.character(metabolit) == "alfa.Caryophyllene")
+hist(datos_filtrados$con_abs, main = "Histograma de Concentración", xlab = "Concentración")
+
+#Grupos independientes SANAS y DAÑADAS
+wilcox.test(con_abs ~ Season, paired = TRUE, data = datos_filtrados)
+
+## alfa.Cubebene
+
+datos_filtrados <- datos %>%
+  filter(as.character(Condition) == "tolerant")%>%
+  filter(as.character(metabolit) == "alfa.Cubebene")
+hist(datos_filtrados$con_abs, main = "Histograma de Concentración", xlab = "Concentración")
+
+#Grupos independientes SANAS y DAÑADAS
+wilcox.test(con_abs ~ Season, paired = TRUE, data = datos_filtrados)
+
+## beta.Caryophyllene.oxide
+
+datos_filtrados <- datos %>%
+  filter(as.character(Condition) == "tolerant")%>%
+  filter(as.character(metabolit) == "beta.Caryophyllene.oxide")
+hist(datos_filtrados$con_abs, main = "Histograma de Concentración", xlab = "Concentración")
+
+#Grupos independientes SANAS y DAÑADAS
+wilcox.test(con_abs ~ Season, paired = TRUE, data = datos_filtrados)
+
+## beta.Cubebene
+
+datos_filtrados <- datos %>%
+  filter(as.character(Condition) == "tolerant")%>%
+  filter(as.character(metabolit) == "beta.Cubebene")
+hist(datos_filtrados$con_abs, main = "Histograma de Concentración", xlab = "Concentración")
+
+#Grupos independientes SANAS y DAÑADAS
+wilcox.test(con_abs ~ Season, paired = TRUE, data = datos_filtrados)
+
+## beta.pinene
+
+datos_filtrados <- datos %>%
+  filter(as.character(Condition) == "tolerant")%>%
+  filter(as.character(metabolit) == "beta.pinene")
+hist(datos_filtrados$con_abs, main = "Histograma de Concentración", xlab = "Concentración")
+
+#Grupos independientes SANAS y DAÑADAS
+wilcox.test(con_abs ~ Season, paired = TRUE, data = datos_filtrados)
+
+## adelta.Cadinene
+
+datos_filtrados <- datos %>%
+  filter(as.character(Condition) == "tolerant")%>%
+  filter(as.character(metabolit) == "delta.Cadinene")
+hist(datos_filtrados$con_abs, main = "Histograma de Concentración", xlab = "Concentración")
+
+#Grupos independientes SANAS y DAÑADAS
+wilcox.test(con_abs ~ Season, paired = TRUE, data = datos_filtrados)
+
+## L.alfa.bornyl.acetate
+
+datos_filtrados <- datos %>%
+  filter(as.character(Condition) == "tolerant")%>%
+  filter(as.character(metabolit) == "L.alfa.bornyl.acetate")
+hist(datos_filtrados$con_abs, main = "Histograma de Concentración", xlab = "Concentración")
+
+#Grupos independientes SANAS y DAÑADAS
+wilcox.test(con_abs ~ Season, paired = TRUE, data = datos_filtrados)
+
+
+
+## alfa.Caryophyllene
+
+datos_filtrados <- datos %>%
+  filter(as.character(Condition) == "damaged")%>%
+  filter(as.character(metabolit) == "alfa.Caryophyllene")
+hist(datos_filtrados$con_abs, main = "Histograma de Concentración", xlab = "Concentración")
+
+#Grupos independientes SANAS y DAÑADAS
+wilcox.test(con_abs ~ Season, paired = TRUE, data = datos_filtrados)
+
+## alfa.Cubebene
+
+datos_filtrados <- datos %>%
+  filter(as.character(Condition) == "damaged")%>%
+  filter(as.character(metabolit) == "alfa.Cubebene")
+hist(datos_filtrados$con_abs, main = "Histograma de Concentración", xlab = "Concentración")
+
+#Grupos independientes SANAS y DAÑADAS
+wilcox.test(con_abs ~ Season, paired = TRUE, data = datos_filtrados)
+
+## beta.Caryophyllene.oxide
+
+datos_filtrados <- datos %>%
+  filter(as.character(Condition) == "damaged")%>%
+  filter(as.character(metabolit) == "beta.Caryophyllene.oxide")
+hist(datos_filtrados$con_abs, main = "Histograma de Concentración", xlab = "Concentración")
+
+#Grupos independientes SANAS y DAÑADAS
+wilcox.test(con_abs ~ Season, paired = TRUE, data = datos_filtrados)
+
+## beta.Cubebene
+
+datos_filtrados <- datos %>%
+  filter(as.character(Condition) == "damaged")%>%
+  filter(as.character(metabolit) == "beta.Cubebene")
+hist(datos_filtrados$con_abs, main = "Histograma de Concentración", xlab = "Concentración")
+
+#Grupos independientes SANAS y DAÑADAS
+wilcox.test(con_abs ~ Season, paired = TRUE, data = datos_filtrados)
+
+## beta.pinene
+
+datos_filtrados <- datos %>%
+  filter(as.character(Condition) == "damaged")%>%
+  filter(as.character(metabolit) == "beta.pinene")
+hist(datos_filtrados$con_abs, main = "Histograma de Concentración", xlab = "Concentración")
+
+#Grupos independientes SANAS y DAÑADAS
+wilcox.test(con_abs ~ Season, paired = TRUE, data = datos_filtrados)
+
+## adelta.Cadinene
+
+datos_filtrados <- datos %>%
+  filter(as.character(Condition) == "damaged")%>%
+  filter(as.character(metabolit) == "delta.Cadinene")
+hist(datos_filtrados$con_abs, main = "Histograma de Concentración", xlab = "Concentración")
+
+#Grupos independientes SANAS y DAÑADAS
+wilcox.test(con_abs ~ Season, paired = TRUE, data = datos_filtrados)
+
+## L.alfa.bornyl.acetate
+
+datos_filtrados <- datos %>%
+  filter(as.character(Condition) == "damaged")%>%
+  filter(as.character(metabolit) == "L.alfa.bornyl.acetate")
+hist(datos_filtrados$con_abs, main = "Histograma de Concentración", xlab = "Concentración")
+
+#Grupos independientes SANAS y DAÑADAS
+wilcox.test(con_abs ~ Season, paired = TRUE, data = datos_filtrados)
+
+
+#model <- lm(sqrt(datos$con_abs))~Condition*Season*A.exposition*metabolit, data = datos)
+
+#ggqqplot(residuals(model))
+
+#shapiro_test(residuals(model)) # Es mayor a 0.05, se cumple supuesto de normalidad
+
+#sphro<-datos%>%
+#  group_by(Condition,Season,A.exposition,metabolit)%>%
+#  shapiro_test(con_abs)
+
+#ggqqplot(data = datos, x = "con_abs", ggtheme = theme_bw())+
+#  facet_grid( Condition + Season + A.exposition ~  metabolit, labeller= "label_both")
+
+
+#Homogeneidad de varianzas
+
+#datos %>% 
+#  levene_test(con_abs~Condition*Season*A.exposition*metabolit) # p debe ser mayor a 0.5, no lo es por lo tanto no cumple el supuesto, tuve que transformar los datos con raíz cuadrada
+
+
+#ANOVA de cuatro vías
+
+#res.aov <- datos%>% 
+#  anova_test(con_abs~Condition*Season*A.exposition*metabolit)
+#res.aov 
+#model <- lm(con_abs~Condition*Season*A.exposition*metabolit, data = datos)
+
+
+#datos%>%
+#  group_by(Condition) %>%
+#  anova_test(con_abs~Season*A.exposition*metabolit, error = model)
+  
+
